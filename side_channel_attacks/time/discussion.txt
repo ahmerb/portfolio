@@ -1,0 +1,176 @@
+Q.1 The vendor of the attack target is concerned that news of this attack
+    could scare off potential customers; they will make any alteration
+    necessary (in software or hardware) to prevent the attack.  Explain the
+    options they have, and which one you would recommend.
+
+A.1 I will disuss a few different countermeasures.
+
+a) A first (and possibly most obvious) countermeasure is to modify the Montgomery
+multiplication algorithm so that the reduction is always carried out, even if
+the result is discarded afterwards.
+
+This is a simple attack. There is also not much performance decrease. A good
+implementation of the countermeasure will clearly defeat the attack as the
+adversary will no longer see time differences when and when not a reduction
+takes place (the conditional branch is now always executed).
+
+However, one must consider the underlying implementation and be sure to remove
+*all* time variation. This is harder than it sounds. When the reduction is
+'faked', if the value is simply discarded and there is no write back,
+then the operation may take less clock cycles. This will still reveal a time difference.
+
+Writing to a dummy variable may not solve this. Imagine a reduction does not
+happen often and writing to the real variable does. Upon every write to the real
+variable, its limb array may already be in cache. However, upon writes to
+the dummy variable, it may need to be loaded from a memory location further
+away (higher level cache / main memory etc). This will incur a time delay,
+and thus the two branches will not take the same time to execute. Also, a different
+side channel, i.e. cache hits, could possibly be used too to differentiate
+between the two cases.
+
+b) Another countermeasure is to use blinding. This takes advantage of the
+homomorphic property of RSA to randomise the decryption. This would mean
+that, for any ciphertext, each decryption of it may require a Montgomery
+reduction one time but not another.
+
+The details follow. Construct a new RSA decryption function s.t.
+
+Dec(d, c)
+  - Generate two random numbers (v_i, v_f) s.t. (v_f)^-1 = v_i^d (mod N)
+  - Decrypt the message c * v_i (instead of c).
+    - (c * v_i)^d = c^d * v_i^d = m^ed * v_i^d = m * v_i^d
+  - Multiply the result by v_f to recover the message
+    - m * v_i^d * v_f = m * v_i^d * (v_i^d)^-1 = m
+
+With this countermeasure, an adversary can no longer exploit knowledge
+of internal computations to do with the timing attack. The attack
+will thus fail. The countermeasure is also general: it is not focused
+on the specific case of Montgomery multiplication. It relies only
+on decryption taking constant time. If the vendor's change implementation
+to Barret multiplication etc, they will still be immune to the attack.
+
+c) According to the Dhem et al paper, the attack is not effective against
+an implementation that uses the Chinese Remainder Theorem (CRT) for modular
+exponentiation. If the vendor implemented the CRT for decryption, then this
+would be a successful countermeasure. This is because the attack relies
+on being able to simulate a Montgomery multiplication and determine when a
+reduction happens. To do this, the attacker must know the CRT moduli p and q.
+However, if the attacker knew p and q, then they could simply calculate the
+private key d and they would not need a side channel attack. So, the using the CRT
+is a good countermeasure. An increase in efficiency will also be obtained.
+
+
+I now discuss the most appropriate countermeasure. The first countermeasure,
+even with a careful implementation, may not make it immune to the timing
+attack: both cases must take exactly the same time to execute. This is
+hard to guarantee. For these reasons, I would recommend the blinding
+countermeasure over the first countermeasure, even though it is a less
+efficient solution. (requiring extra multiplications). However, the CRT is
+solution is better than blinding still. It protects against the attack and
+also increases efficiency.
+
+Note: a further potential countermeasure could be adding random time delays. This
+is just adding white noise, such as would be caused by the decryption
+process being scheduled out by the kernel. A linear increase in
+the sample size (number of ciphertexts used in attack) would mitigate
+against this. It's thus not recommended.
+
+Note: In his paper, Kocher suggests that a timing attack could be used
+to determine the upper digits of p. However, I have not personally come
+across a similar attack against Montgomery Multiplication with CRT.
+
+Kocher paper: http://web.cse.msstate.edu/~ramkumar/TimingAttacks.pdf
+
+
+
+Q.2 The vendor of the attack target is concerned that a similar attack may
+    also apply to their implementation of ElGamal encryption.  Explain the
+    potential for such an attack, and how it differs wrt.  the case of RSA.
+
+A.2 The attack is viable against any scheme where there is a modular
+exponentiation where 1) the base is known, 2) the exponent is secret
+(what we're trying to recover) and, 3) the modular exponentiation is
+implemented using square and multiply and Montgomery multiplication.
+
+ElGamal satisfies these criteria. In the decryption phase, one computes
+c_1^x, where c_1 is a (known) ciphertext and x is a (unknown) private key.
+If this is implemented with Montgomery multiplication and square and
+multiply, then the vendor will still be susceptible to the attack.
+
+Note, many implementations of ElGamal compute c_1^(p-1-x) to avoid
+computing the modular inverse of (c_1^x). The attack still applies.
+The attack would recover y=(q-x). As q is part of the public key,
+an attacker can easily compute x=q-y and recover the private key.
+
+Another note is that ElGamal's decryption phase includes far more
+operations than just the modular exponentiation with the secret.
+This is in contrast to (vanilla) RSA, where this is the only
+operation. Therefore, the variation the attacker is trying to detect
+is a far smaller percentage of the total decryption time. This makes
+the measurements much more sensitive to noise. To mitigate this,
+more sample ciphertexts will be required, which will cause the attack
+to take longer.
+
+
+Q.4 Numerous factors might produce noise within measurements of execution
+    time: based on the given attack target and context, outline at least
+    two examples.
+
+A.4
+
+Note: Running with different inputs (N, e) and parameters (confidence
+diff_threshold, number of ciphertexts) and different random ciphertext
+samples will result in different runtimes due to different cache
+hit rate, branch prediction, and so on. This will obviously cause
+different run times / number of clock cycles. In the following, I
+discuss reasons for time variation when the input is exactly the same.
+
+It is probably safe to assume that the operating system running on the
+target server D will use some sort of process scheduling. This means that the
+process running the RSA decryption will be (extremely likely) scheduled out by
+the processor at some point during its execution. This will cause the execution of
+the decryption process to be paused for a time that is not determined by the
+input parameters to the decryption function. Many factors, depending on the
+other processes running & the scheduling implementation used, will affect the
+time. Some factors include:
+
+  - The number of other ready processes.
+  - If the kernel uses preemptive scheduling, then the time between timer interrupts will affect the time.
+  - If the kernel is not preemptive, then the time until another process yields and returns control to the kernel
+  - If the kernel uses an MLFQ, the proportion of processes that are I/O bound will reduce the process's time share on the CPU.
+  - In the linux kernel (which is commonly used in commercial servers), processes can ask to be given higher priority in the scheduling queue. Thus, the number of other processes asking for higher priority will also affect the time before being scheduled back in.
+
+The time that other processes are blocked by I/O (which affects scheduling) is also determined by numerous factors. These might include:
+
+  - Synchronous I/O e.g. waiting on user input (e.g. from a system admin)
+  - Waiting on the network.
+    - Packets will take varying time to travel across the internet. This includes a multitude of factors, e.g. the route the packet takes, physical factors, packets being lost etc.
+    - If the server communicates over TCP, then the process also has to wait for ACK'ing etc.
+
+There are also other factors that may affect the runtime of the process.
+
+  - The server hosts an Intel Core2 processor. This might be a multi-core processor that has shared caches. A process running on a different core will use this shared cache. This will affect the cache hit rate, and thus run time, of the RSA-decryption process.
+  - The process running on the other core might be highly CPU intensive. This will cause the processor to heat up, which may result in throttling of the CPU clock speed. This will affect the time taken.
+
+
+
+Q.8 Imagine you read a research paper that suggests a larger key (e.g.,
+    2048-bit rather than 1024-bit) could help to prevent this attack.
+    Explain whether and why you think this is right (or wrong).
+
+A.8 Depending on the sample size and noise in inputs, each key bit will be
+guessed correctly by the attack algorithm with some probability, say
+X. If the key size increases, say from l to 2l, then there are now
+double the key bit guesses where there is a 1-X probability of an incorrect
+guess. Therefore, the attack becomes much more likely to fail: Only one in 2l
+guesses need be incorrect, compared to 1 in l before.
+
+To mitigate this, the attacker must use a much larger sample size. This will
+produce more confidence in the key bit guesses and thus increase the probability
+X of a correct guess. Using a larger sample size will obviously involve using
+more space and time. The Fig 5 in the Dhem et al paper shows that the
+relationship between the key bit size and the samples required for success is
+super-linear.
+
+So, increasing the key size will not cause the attack to fail, but it will cause
+the attack to take longer.

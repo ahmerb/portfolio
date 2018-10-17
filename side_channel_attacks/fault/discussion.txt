@@ -1,0 +1,241 @@
+
+Q.1 Consider that instead of influencing data (e.g., the AES state), a
+    fault might influence control-flow (e.g., a conditional statement)
+    somehow during execution.  Stating any assumptions you make, give an
+    alternative attack strategy based on this ability.
+
+A.1
+
+The attack strategy I'll give uses the following fault model / assumptions.
+We assume that a fault is injected that modifies the opcodes being processed
+by the processor. Specifically, we modify the control flow of the MixColumn
+function in the eighth round from 16 bytes to 15 bytes, i.e. there is one byte
+that remains unchanged by the function.
+
+We can expect to identify when the desired fault has been induced by
+observing a suitable side channel. In [1], an example of the power
+consumption of an ARM7TDMI processor is given.
+
+So, we now have a fault free and faulty ciphertext pair. First, we carry
+out the attack I have implemented (Section 3, [1]) to reduce the possible
+key hypotheses to an expected value of 2^8. We can now verify that the
+effect of the fault is possible with the key hypotheses we have. To do this,
+check that the input of the relevant byte to the MixColumn function is the
+same as the output when the fault I described above is induced. We can do
+this verification in parallel whilst also evaluating the Stage 2 set of
+equations (see the function `stage2_eqs` in attack.c). According to [1],
+this extra verification would further reduce the expected number of key
+hypotheses to 2. This is argued as follows.
+
+Before the extra verification step, we have 2^8 expected key hypotheses.
+One of these will be the correct key, so there is at least one final
+possible key hypothesis. The remaining 255 hypotheses from the 2^8 will have
+probability of passing with 1/256. The expected number of key hypotheses is
+therefore 1 + 255/256.
+
+Alternatively, if we have extremely powerful fault inducing equipment, then
+we could do the following. Modify the control flow s.t. only the first step of
+encryption, X <- AddRoundKey(P, K) (following notation in [1, Algorithm 1]), is
+performed. In other words, we are modifying the control flow so only this first
+step of encryption is performed and the remaining ten rounds are not. This would
+then make key recovery trivial, as we would only have to add (xor) the plaintext we
+input to the ciphertext that is output to recover the key. I emphasise that being
+able to induce this many faults in a short period of time and to induce them on
+the precise control flow instruction every single time requires some very
+good equipment.
+
+
+
+
+Q.2 Outline the methods available for hardening this AES implementation
+    against fault attacks; for each method, explain any assumptions you
+    make and compare it with the others wrt.  metrics such as robustness,
+    latency, and memory footprint.
+
+A.2
+
+There are both hardware and software countermeasures we can take to prevent
+fault attacks. I'll start with hardware countermeasures.
+
+We can prevent the fault being induced. In the question scenario, the attacker
+induces faults by causing an irregular clock signal. To prevent this, we can
+use sensors against common methods of doing this. For example: low and high
+voltage sensors; light sensor; glitch sensor; temperature sensor; etc.
+Using this method to prevent faults would stop the attacker from inducing faults.
+It does not require extra time of memory, so in terms of latency and memory
+footprint we can say its good. In terms of robustness, if the sensors are of
+good quality, then this countermeasure should work. However, this is only if
+we have a sensor for every method an adversary may use to induce faults, e.g.
+light / temperature / glitch.
+
+We can also use software countermeasures. These do not prevent inducing a fault
+but prevent a fault attack from working. One such countermeasure is instruction
+duplication. We duplicate instructions and store the result in a separate register
+(so, this countermeasure assumes the AES implementation doesn't use all
+registers in the CPU). After repeating an instruction, the results are compared.
+If a mismatch is detected, there may well have been a fault induced, so we
+invoke an error handler routine. This signal the error and also fill the AES
+state, round key matrix, etc with random data in order to prevent information leakage.
+In terms of latency, this countermeasure will at least double the encryption time.
+In terms of memory footprint, we will use extra registers. But, the extra data we store
+only needs to be kept for the one instruction, and can be cleared afterwards. So,
+we shouldn't see much increase in use of main memory.
+In terms of robustness, this method should protect against most faults. However, there
+are a few for which is is insufficient [2]. For example, consider an instruction
+skipping fault which bypasses the branch instruction after the comparison of the
+results from the instruction and duplicated instruction. This would bypass branching
+to the error management routine if a discrepancy is detected.
+
+Another software countermeasure is instruction triplication: to repeat an instruction
+and store the two extra results in two unused registers. This method can, as well
+as detect errors, actually correct the errors too. Assuming a single fault has been
+injected, then only one of the registers will hold a different value. In this case,
+the error correction algorithm will choose the value that appears twice in the registers.
+Execution then continues as normal. In terms of latency, this countermeasure will
+at least triple the execution time. In terms of memory footprint, the same analysis as
+above applies. In terms of robustness, the method is strong (triple redundancy), but,
+if a highly advanced attacker can induce certain faults, they can bypass the countermeasure.
+If they can inject two faults in a row at the atomic instruction level, then they can put
+the same faulty value in 2 of the 3 registers and the error correction algorithm will choose
+the faulty value. An attacker could also skip the branching in the error correction mechanism,
+similar to as described for instruction duplication.
+
+For the previous two attacks, a highly fine level of redundancy, i.e. instruction level,
+is required. This has a big hit on latency. On the other hand, a highly advanced attacker
+is required to bypass the countermeasure. They will need to inject faults in consecutive
+instructions too. Current fault injection techniques, e.g. lasers / clock glitches, do not
+allow this [3].
+
+An alternative software countermeasure would be to repeat the last few rounds to verify no
+fault has been inserted. To prevent the attack I implemented, duplication of the last 5 rounds is
+recommended [1]. This requires redundancy at a much less fine level, so it is better
+in terms of latency.  This countermeasure would have fairly significant memory footprint.
+In terms of robustness, an attacker can bypass the countermeasure by injecting the fault again
+in the repeated rounds. A suitable side channel can be monitored to see when to inject the fault.
+However, the above 2 countermeasures require that the attack injects faults in consecutive instructions.
+As discussed, this is an extremely short time period so is very difficult. But, injecting the
+fault twice in the time it takes to compute the last 5 rounds again is far easier. The countermeasure
+is therefore less robust than the previous two.
+
+
+
+
+Q.3 The question outlines one method to induce faults (i.e., via a clock
+    glitch).  For the same attack target, construct a set of alternative
+    methods and explain whether they seem applicable given the context.
+
+A.3
+
+NOTE: For this question I use [4] as reference. Claims I make about the cost / effectiveness / etc
+of an injection technique uses [4] as a basis for these claims.
+
+There are two different types of fault that the attacker may want to inject, namely global
+and local. Global fault injections usually low cost and create disturbances on global parameters
+like voltage or clock. They usually are random in nature, so many faults may have to
+be injected to get the desired fault. Local fault injections will more precisely disturb a
+specific data location at a specific time during execution. But, they are more costly to inject.
+
+The kind of fault the attacker injects is defined as the fault model. This has two parameters,
+the location and impact. Location means the spatial and temporal location of fault injection
+during execution. So, faults could be either at the level of precise bit, byte, variable or
+just random. The impact is the effect on the target data. Common impacts are bit-flip, random
+change, making a byte stuck, etc.
+
+The situation with the attack target presented.
+  - 8-bit Intel 8051 processor
+  - ISO/IEC 7816 compliant contact-based smart-card chip
+  - Used within larger devices as crypto coprocessor
+  - Attacker has physical access to D
+  - Attacker supplies the power and clock signals to D
+  - One malfunction, or fault, can be induced per interaction with D
+  - It randomises one elements of the state matrix during the encryption
+
+Now, I discuss possible alternative methods for injecting faults. I discuss fault injection
+through power supply, light, electromagnetic fields and ion beams. I evaluate the applicability
+of each to the given attack context.
+
+Fault injection through Power Supply
+  - Attacker supplies power to D.
+  - Fault can be induced by either *underfeeding* or *voltage glitch*.
+  - Effect of this usually causes flip-flops to be triggered before the
+    input signals reach a stable and correct value.
+  - Used to skip execution of instruction in microprocessor code.
+  - This applies to the attack described in Q.1 (above).
+  - Temporal precision of fault injection depends on accuracy of voltage drop;
+    This type of fault injection is global.
+  - Injecting faults in this manner is applicable as adversary controls power supply to D.
+  - But, for the attack I've implemented, they need to insert fault at specific position.
+  - This is difficult with this method.
+
+Fault injection through clock
+  - This is the chosen method in the coursework brief.
+
+Fault injection through light
+  - Light pulse or laser is directed onto the chip.
+  - This is a local fault injection and so has fairly high precision.
+  - However, to do an optical attack, they need to decapsulate the target device.
+  - In the attack context, the attacker has physical access to the chip.
+  - But, they would still need to remove layers from the smart card chip so that they can
+    shine light directly on transistors.
+  - This will likely destroy the smart card, making it non-operational. Whether this is 'okay'
+    depends on what the attacker is trying to achieve.
+  - A laser beam is also very expensive.
+
+Fault injection through electromagnetic fields
+  - EM pulses cause change the memory content of the device.
+  - Can do very precise fault injection, and equipment relatively cheap.
+  - No need to decapsulate the chip.
+  - However, if the smart card chip uses grounded metal packaging, then this
+    can act as an EM shield, which requires the attacker to perform decapsulation.
+  - Like for the light technique, this could destroy the device.
+
+Fault injection through focused ion beams
+  - Attacker has complete control to arbitrarily modify the structure of a circuit.
+  - But, the equipment is extremely expensive and requires very high expertise to use.
+  - This might make this technique out of scope for the attacker.
+  - It is also completely invasive and will probably also ruin the smart card.
+
+
+
+Q.6 One way to reduce the effectiveness of DPA attacks on AES is to use a
+    masking countermeasure.  Explain if and why the *same* countermeasure
+    could also have an impact on the effectiveness of fault attacks.
+
+A.6
+
+The fault attack implemented relies on exploiting the relationship between bytes
+of the state matrix across rounds. By inducing a fault in the 8th round in
+some specific position, the fault spreads to the entire matrix by the end of
+the tenth round. We can then use the relationship between the faulty and fault-free
+ciphertexts, knowing exactly the how the fault is propogated, to reduce the
+search space for the key.
+
+With masking against DPA attack (see Q.1 answer in ../power/21452.exam), each intermediate value v
+(input to SBox) is concealed by a random value m, the mask. The mask would not be known by
+the attacker. We do this as follows. We precompute another SBox lookup table
+S_m s.t. S_m( v XOR m ) = S( v ) XOR m = v_m.
+Now, we replace the SBox operation S( v ) with S_m( v XOR m ). Then, afterwards, we XOR the result
+with m to get S( V ).
+
+I'll consider this countermeasure on the fault attack implemented, i.e. [1].
+
+The fault is induced in the input to the 8th round SBox. Using masking, we would replace this
+operation S( v ) with S_m( v XOR m ). We then later XOR this with m to get S( V ).
+This does not affect the position in the state matrix where the fault is.
+Therefore, the systems of equations used in the attack to constrain the key space would still
+apply.
+
+
+
+
+REFERENCES
+----------
+
+[1] Michael Tunstall, Debdeep Mukhopadhyay, and Subidh Ali. 2011. Differential fault analysis of the advanced encryption standard using a single fault. In Proceedings of the 5th IFIP WG 11.2 international conference on Information security theory and practice: security and privacy of mobile devices in wireless communication (WISTP'11), Claudio A. Ardagna and Jianying Zhou (Eds.). Springer-Verlag, Berlin, Heidelberg, 224-233
+[2] Alessandro Barenghi, Luca Breveglieri, Israel Koren, Gerardo Pelosi, and Francesco Regazzoni. 2010. Countermeasures against fault attacks on software implemented AES: effectiveness and cost. In Proceedings of the 5th Workshop on Embedded Systems Security (WESS '10). ACM, New York, NY, USA, , Article 7 , 10 pages. DOI=http://dx.doi.org/10.1145/1873548.1873555
+[3]  S. P. Skorobogatov. Semi-invasive Attacks-a New
+Approach to Hardware Security Analysis. Ph.D.
+dissertation, University of Cambridge - Computer
+Laboratory, 2005. [Online]. http://www.cl.cam.ac.
+uk/techreports/UCAM-CL-TR-630.pdf
+[4] Piscitelli R., Bhasin S., Regazzoni F. (2017) Fault Attacks, Injection Techniques and Tools for Simulation. In: Sklavos N., Chaves R., Di Natale G., Regazzoni F. (eds) Hardware Security and Trust. Springer, Cham

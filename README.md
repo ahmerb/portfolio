@@ -1,25 +1,57 @@
 # Portfolio
 
-A portfolio of selected projects that I've completed either on my own or in a small team. A full codebase is usually not provided. Often, a nice report is included with the project :smile:. This repo this is *not* at all an exhaustive list of all the work I've done.
+A portfolio of some small selected projects that I've completed either on my own or in a small team. A full codebase is usually not provided. Often, a nice report is included with the project :smile:. This repo this is *not* at all an exhaustive list of all the work I've done.
 
-Here's a short summary of each project.
+Here's a short summary of each project. Within each project is a more detailed README.
 
 
-### Simple Kernel
+### Differential Side Channel and Fault Analysis Attacks on RSA and AES
+
+[side_channel_attacks](./side_channel_attacks/)
+
+An extremely intensive third-year coursework in which I implemented three different differential side-channel and one differential fault attack against RSAES-OAEP, RSA (Montgomery multiplication), AES-128 and XTS-AES block decyption. The side-channel attacks are against error messages, power consumption and time.
+
+Implementing the attacks require a deep understanding of all of the following:
+  - The underlying cryptography.
+  - How BigNum libraries are implemented, including optimisation techniques like Montgomery multiplication.
+  - The formal specifications for RSAES-OAEP, RSA (Montgomery multiplication), AES-128 and XTS-AES as defined by PKCS / IEEE etc.
+  - Differential side-channel and fault analysis attacks. In particular, I implement sophisticated attacks from multiple papers.
+
+
+### Implementations of RSA and ElGamal Cryptosystems
+
+[rsa_elgamal](./rsa_elgamal/)
+
+Third-year coursework in which implemented RSA and ElGamal cryptosystems in C using GMP. Some features of GMP are not used. Instead, I implement many optimisations manually. The implementations make no effort to be resistant to side-channel attacks, but are efficient.
+
+In particular, I implemented optimisations like:
+ - Use of Chinese Remainder Theorem
+ - Sliding Window Exponentiation
+ - Montgomery Multiplication
+
+I also ensured I used a reasoned and proper approach to pseudorandom key generation for ElGamal ephemeral keys.
+
+### Simple Kernel for ARM Cortex-A8
 
 [kernel](./kernel/)
 
-An individual second-semester second-year coursework in our Concurrent Computing module. I started with an extremely primitive kernel consisting of not much more than a simple interrupt table that called an empty assembly method which called a C function upon a timer or reset interrupt. I then added simple process management, pcb tables, system calls including fork, exec and kill, command-line arguments, a priority based scheduler and interprocess communication via pipes.
+I started with an extremely primitive kernel consisting of not much more than a simple interrupt table that called an empty assembly method which called a C function upon a timer or reset interrupt. I then added simple process management, pcb tables, system calls including fork, exec and kill, command-line arguments, a priority based scheduler and interprocess communication via pipes.
 
-The final kernel is almost 1500 lines. It is written mostly in C and some ARM assembly. The main stuff is in the file [hilevel.c](./kernel/hilevel.c).
+It is written mostly in C and some ARM assembly. The main stuff is in the file [hilevel.c](./kernel/kernel/hilevel.c).
 
-The full kernel is included, but wrappers around IO hardware devices such as the timer (simulated with ARM's QEMU) were not written by me and so I've removed them. The kernel source is in the folder [kernel](./kernel/kernel/). Some files to be run in user space are also included in the folder [user](./kernel/user). A library that uses inline asm to make traps is in [libc](./kernel/libc.c). Two user program, called `philosopher` and `waiter` are also included. These demonstrate interprocess communication by simulating the [Dining Philosophers Problem](https://en.wikipedia.org/wiki/Dining_philosophers_problem). A console program is also provided, which is executed by default on a reset.
+The full kernel is included, but wrappers around IO hardware devices such as the timer (simulated with ARM's QEMU) were not written by me and so I've removed them.
+
+The kernel source is in the folder [kernel](./kernel/kernel/).
+
+There are some example user processes to be run in user space are also included in the folder [user](./kernel/kernel/user). Two user program, called `philosopher` and `waiter` are included. These demonstrate interprocess communication by simulating the [Dining Philosophers Problem](https://en.wikipedia.org/wiki/Dining_philosophers_problem). A console program is also provided, which is executed by default on a reset.
+
+I also wrote a C library that uses inline asm to make traps. Its used by programs in user space. Its in [libc](./kernel/kernel/libc.c). 
 
 ### Image De-noising Using Iterative Conditional Modes, Gibbs Sampling, Mean Field Variational Bayes in The Ising Model
 
 [image_denoising](./image_denoising/)
 
-This is a third year coursework in a team of three. We used the Ising Model to represent a noisy image as generated by a latent clean image. In the Ising Model, we model each observed pixel Y_ij as generated by a latent X_ij. All the X_ij lie in a Markov Random Field where neighbouring nodes are connected. As the posterior distribution over the latents is computationally intractable to compute, we employ the methods above to recover it.
+This is a third year coursework in a team of three. We used the Ising Model to represent a noisy image as generated by a latent clean image. In the Ising Model, we model each observed pixel `Y_ij` as generated by a latent `X_ij`. All the `X_ij` lie in a Markov Random Field where neighbouring nodes are connected. As the posterior distribution over the latents is computationally intractable to compute, we employ the methods above to recover it.
 
 Some of the Python code is included. Our report is also included. I am responsible for most of the implementation for Iterative Conditional Modes and all of the Gibbs implementation. In the report, I wrote the theoretical explanation of the Ising Model and ICM in Q1 and also all of Q2, Q3 and Q4 on Gibbs. I made small contributions to other sections of the report too. The remainder was done by my talented fellow students Louis (@Lun3x) and Luke (@LukeStorry). As I'm not responsible for that code, it's not included. We achieved a First Class grade with a total mark of 90%.
 
@@ -27,7 +59,7 @@ Some of the Python code is included. Our report is also included. I am responsib
 
 [ml_cw1](./ml_cw1)
 
-#### TODO: Sorry, I haven't uploaded this project here yet.
+#### Sorry, I haven't uploaded this project here yet.
 
 Another third-year Machine Learning coursework with Louis (@Lun3x) and Luke (@LukeStorry). We achieved First Class grade with a total mark of 80% in this.
 
@@ -35,12 +67,24 @@ This coursework required a 10 page report involving answers to a range of questi
 
 I have made some minor modifications to the report I've given here compared to the one we submitted.
 
+### Parser and Natural Semantics for the 'Proc' Language in Haskell
+
+[parser_and_semantic_interpreter](./parser_and_semantic_interpreter/)
+
+Proc is an extension of the While language which includes conditionals, loops, blocks, procedures and recursion. The parser was written using the Megaparsec library written in Haskell. The semantic interpreter was written from scratch. I followed the textbook by Nielson & Nielson in which they derive the natural semantics for the While and Proc languages. The are three implementations for the semantic interpreter. One using dynamic scope, one using a mixture of static and dynamic scope and one using static scope only. I achieved a First Class grade with marks of 82%.
+
 ### Dartboard Object Detector using Hough Circle and Line Transforms and Viola-Jones
 
 [dartboards](./dartboards/)
 
 A third-year pair project for the unit Image Processing and Computer Vision. We (me and @callumPearce) used OpenCV in C++ to build a dartboard detector. First, we used OpenCV's 'cascade classifier' function to train a Viola-Jones classifier to detect dartboards. This would give us regions in an image where dartboards may be. We then implemented Hough Circle and Line transforms to look for concentric circles and lines going through their centre points. I've included our report discussing our results and the methods we've used. We achieved First Class marks. At the moment, only the report is included.
 
+### Simple concurrent web server written in Golang
+
+[go_web_server](./go_web_server)
+
+I initially completed this as a coding challenge when applying to be an intern at a company called Ravelin. I thought it was interesting enough to include here. I had to learn Golang and implement a web server using standard libraries that handles concurrent requests and implements basic session handling. To support this, you have to use mutex's on the session store etc.
+The front end is a simple form that sends information about the form's usage to the backend, which is then stored in the user session. I went on, after further technical interviews, to receive an offer from Ravelin.
 
 ### OpenMP & Serial Optimisations for a Dense Linear Algebra Program
 
@@ -56,28 +100,8 @@ Optimisations included false sharing, load balance, thread affinity, branch pred
 
 A second-year project with Louis (@Lun3x). We converted the images to Fourier Space, where we can better detect distinctive regions for the above letters. We then used k-Nearest Neighbours for classification.
 
-### Parser and Natural Semantics for the 'Proc' Language in Haskell
-
-[parser_and_semantic_interpreter](./parser_and_semantic_interpreter/)
-
-A second-year individual coursework. Proc is an extension of the While language which includes conditionals, loops, blocks, procedures and recursion. The parser was written using the Megaparsec library written in Haskell. The semantic interpreter was written from scratch. I followed the textbook by Nielson & Nielson in which they derive the natural semantics for the While and Proc languages. The are three implementations for the semantic interpreter. One using dynamic scope, one using a mixture of static and dynamic scope and one using static scope only. I achieved a First Class grade with marks of 82%.
-
 ### Concurrent Game of Life in xC Language
 
 [concurrent_game_of_life](./concurrent_game_of_life/)
 
 A second-year pair coursework. We implemented the Game of Life in xC, a language that is a supserset of C that allows for concurrent programming in the message passing paradigm. The xC language is designed to run on XMOS boards. They contain multi-core processors, some RAM, an accelerometer and some buttons. Features like pausing the game upon tilting the board or writing the current game state to file in parallel upon pressing a button are also implemented. We achieved a First Class grade.
-
-### Scotland Yard Board Game with AI Player in Java
-
-[scotland_yard](./scotland_yard)
-
-A first-year coursework. I haven't included an implementation of the Scotland Yard board game but I have included the implementation for the AI player. It uses a minimax tree with alpha-beta pruning to choose moves. To determine which game state is better than another, a scoring heuristic is used which includes using Prim's and Dijkstra's algorithms to find shortest paths between players in the game.
-
-### A small example ASP.NET Core Web Application
-
-[asp_web_app](./asp_web_app/)
-
-This is a small tutorial web app I created as part of the final report for a second-year group project. Our group, of six people, worked with Bristol and London based company SoftWire to develop a mobile and web application, called Natrix. This application was not for deployment to SoftWire customers but a University partnership for students to experience software development in a more industrial setting (Lots of agile, JIRA etc..). We used ASP.NET Core to build a shared back-end for our web and mobile apps. We used Xamarin, a cross-platform development framework, to create Android and iOS apps. I was involved in developing the CRUD API for the mobile apps.
-
-Natrix was an app for small teams to vote on simple questions, like "Where should we go for a drink after work?". Unfortunately, there isn't too much to see here. I can't include the actual codebase. But, for the final report I was required to create a small technical report that served as a tutorial for the tech we used. So, I have included this report, along with the code for a very simple Web API built in ASP.NET Core.

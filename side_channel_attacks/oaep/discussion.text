@@ -1,0 +1,319 @@
+Q.1 Consider the parameters N = 3551, e = 5, d = 1373, and c = 888, all
+    represented in decimal.  Use them to explain, in your own words, the
+    principle of this attack (e.g., how and why it works).
+
+A.1
+
+N = 3551, e = 5, d = 1371 and c = 888.
+
+First, we calculate the value of k (bit len of N) and B.
+
+k = ceil(log_256(N)) = ceil(log_256(3551)) = 2
+B = 2^(8*(k-1)) = 2^8 = 256
+
+As the attacker, we have access to a public key (N, e) and an oracle (the target
+device) that for any chosen ciphertext x indicates whether the corresponding plaintext
+y = x^d (mod N) is less than B or not. To realise this, an error between a failure
+in the integer-to-octet string conversion and any subsequent failure, e.g. of the
+integrity check, is distinguished between.
+
+The attacker wants to discover the underlying plaintext m = c^d (mod N) of c.
+
+The attack relies on the following property. The attacker can choose a
+value f and sends f^e * c (mod N) to the oracle. Due to
+RSA's multiplicative homorphicity, the decryption of that equals f * m (mod N).
+A proof of this is given in Q.4. The oracle can tell the attcker whether f * m
+is in the range [0, B) or (B, N). This gives a mathematical relationship about
+m that reduces the range (or ranges) in which it must lie. The aim is to reduce
+the range (or ranges) in which m must lie. The attacker can do this with successive
+oracle queries until the range is reduced to one value, which will be m.
+
+Step 1)
+
+We need to choose an f s.t. f * m must lie between the two ranges.
+We try multiples 2^i for i=1... until the oracle returns "y>=B"
+
+1. Choose f1 = 2  ->  2^5 * 888 (mod 3551) = 8.
+   Send to oracle.
+   8^1373 (mod 3551) = 246 < B=256 and thus oracle returns "<B".
+
+2. Choose f1 = 4 -> 4^5 * 888 (mod 3551) = 256
+   Send to oracle.
+   256^1373 (mod 3551) = 492 >= 256 and thus oracle returns ">=B" and we move to next step.
+
+Step 2)
+
+As oracle indicated ">=B", this implies that f1 is in range [B,2B). So,
+f1/2 is in range [B/2,B).
+We now start with a multiple f2 s.t. f2*m is less than n+B for the maximum
+possible m. We keep increasing this multiple until the oracle returns "<B".
+
+1. f2 = floor((N + B) / B) * f1/2
+      = floor((3551 + 256) / 256) * (4 / 2) = 28
+
+   So 28*m is in [3551/2, 3551+256)
+
+   Now we send 28^5 * 888 (mod 3551) = 2331 to the oracle.
+   It computes 2331^1373 (mod 3551) = 3544 >= B and returns ">=B"
+   So, we add f2 = f1/2 + f2
+
+2. f2 = 2 + 4/2 = 30
+   We send 30^5 * 888 (mod 3551) = 2790 to the oracle.
+   It computes 2790^1373 (mod 3551) = 139 < B
+   and returns "<B" so we have finished Stage 2.
+
+
+Step 3)
+
+  We know f2*m is in range [N, N+B) and so we have a range [m_min, m_max) of
+   possible values of m where:
+
+  m_min = ceil(N / f2) = ceil(3551 / 30) = 119
+  m_max = floor((N+B) / f2) = floor((3551 + 256) / 30) = 126
+
+  Choose a multiple f_tmp s.t. width f_tmp*m is approximately 2*B.
+
+  f_tmp = floor((2*B) / (max-min)) = floor((2*256) / (126-123)) = 73
+
+  i = floor((f_tmp * m_min) / N) = floor((73 * 119) / 3551) = 2
+
+  f3 = ceil((i*N) / m_min) = ceil((2*3551) / 119) = 60
+
+  Now try f3 with oracle. Send 60^5 * 888 (mod 3551) = 505.
+  Oracle computes 2790^1371 (mod 3551) = 278 >= B
+  So oracle returns ">=B"
+
+  This implies f3*m is in range(i*N+b, i*N + 2B)
+
+  Set m_min = ceil((i*N + B) /  f3) = ceil((2*3551 + 256) / 60) = 123
+
+  m_min != m_max so we loop through Step 3 again.
+
+  But, m_min^e (mod N) = 123^5 mod (3551) = 888 = c so we have found the
+  message and I will skip the remaining computations.
+
+
+Q.2 To prevent the attack, the vendor suggests altering the software: the
+    idea is that no matter what error occurs, the same error code will be
+    produced.  Explain whether (and why, or why not) this change alone is
+    sufficient.
+
+A.2
+
+The attack relies on distinguishing a failure in the integer-to-octets string
+conversion from any subsequent failure, e.g. of the integrity check during
+OAEP decoding. Altering the implementation so that the same error code is
+produced suggests it would remove the necessary condition for the attack to
+proceed. However, there are many caveats.
+
+Firstly, if the software is also altered to produce error messages, e.g.
+"decryption error" as specified in PKCS #1 v2.1, then the error messages
+must also be completely indistinguishable. A spelling mistake or change
+in letter case will render the errors distinguishable. Having to rely on
+this for security is not ideal.
+
+Secondly, even if the error messages are exactly the same, it is likely
+that the software also produces logs. These are likely to give more
+detailed error messages, even if it hides them from the user output.
+More over, in PKCS #1 v2.1, the subroutines that `RSAES-OAEP-Decode` calls
+upon e.g.`I2OSP` are specified to return other error messages. It is
+likely that these will be logged. If an adversary can access system logs,
+then they can perform the attack. System logs are usually protected with
+less security than private keys and are available to many people, so it
+is quite possible that an adversary could gain access.
+
+Thirdly, it is also possible that a different error triggering will reveal
+if the OAEP-decoding stage is reached. There are many possible such errors
+that are not mentioned in PKCS #1 v2.1. For example, the Manger paper suggests
+the following. Imagine an adversary uses an unsupported mask generation
+function. Though not in PKCS, the implementation may return "unsupported
+algorithm", but only at the point when the MGF is first called. This will
+reveal that the OAEP-decoding stage has been reached.
+
+Fourthly, and probably most importantly, the execution time is likely to
+reveal if the process failed in integer-to-octet conversion or made it to
+a later point / the integrity check. Even if this time difference is small
+compared to the total execution time of RSAES-OAEP-Decode (modular
+exponentiation will likely take most of the time), using many samples with
+the same parameters and performing statistical analysis (e.g. take the mean)
+would allow distinguishing between the two cases.
+
+RSAES-OAEP also suffers from a bigger target for timing attack. In a CCA attack,
+the adversary may choose the label which is hashed. This label can be of
+arbitrary length. It is reasonable to assume (as PKCS also suggests) that the
+hash of params only takes place after the integer-to-octet conversion. An
+adversary can then achieve whatever time difference he or she requires to
+distinguish the relevant error sources by using a sufficiently large octet
+string for the parameters.
+
+All of the above need to also be considered by the vendor, as well as returning
+the same error code, if they want to
+fully mitigate against this attack. However, the above countermeasures
+still rely on security by obscurity, which is widely considered poor
+and outdated practice. I now discuss more options.
+
+Firstly, you could move the hashing of the label to before the integer-
+to-octet conversion. This remove the usefulness of the hashing in distinguishing
+between which error occurred by using execution time, but does not solve the
+problem.
+
+The vendor should also move any processing that does not have to occur between
+the decryption and integrity check to another location. This includes
+the above point (hashing the label), checking the relevant MGF and hash
+functions are supported, allocating memory required for different decoding
+operations. Again, these are steps towards preventing an adversary distinguishing
+between the relevant error cases, but does not solve the problem entirely.
+
+
+
+
+Q.4 This attack is based on the fact that decrypting a ciphertext of the
+    form c = (f^e)*c' mod N produces a plaintext of the form f*m' mod N.
+    Show why this fact is true.
+
+A.4
+
+The RSA decryption function is defined as:
+
+Dec(c, d) = c^d mod N, where d is the private exponent and N is the public modulus
+
+We can decrypt c <- (f^e)*c
+
+Dec((f^e) * c, d)
+
+= (f^e * c)^d  (mod N)
+
+= (f^e)^d * c^d (mod N)
+
+= f^ed * c^d (mod N)
+
+We know by the correctness of RSA that c^d (mod N) = m (mod N).
+
+= f^ed * m (mod N)
+
+We know that e and d are modular inverses mod phi(N), where phi is the Euler Totient
+Function. We also know phi(N) = (p-1)*(q-1) where N=pq. Let phiN <- phi(N).
+So, ed = 1 (mod phiN).
+Thus, e*d = 1 + k*phiN for some integer k.
+We substitute this into our equation.
+
+= f^(1 + k*phiN) * m (mod N)
+= f * (f^(phiN))^k * m (mod N)
+
+Now we have two cases.
+
+1) gcd(f, N) = 1.
+We can apply Euler's/Lagrange's Theorem, so
+
+= f * (1)^k * m (mod N)
+= f * m (mod N)
+
+and we are done.
+
+2) gcd(f, N) != 1
+
+It will suffice to prove the result mod p and mod q as we can then combine
+the result mod N by the Chinese Remainder Theorem. (It follows from the CRT
+that if x=y(mod p) and x=y(mod q) then x=y(mod N)).
+
+Because gcd(f, N) != 1, then either gcd(f, N) = p or gcd(f, N) = q.
+We proceed with the former case without loss of generality.
+
+Let gcd(f, N) = p
+This implies that f = x*p for some x > 0 which means that f mod p = 0.
+So, we can write (f^(e*d)) = (x*p)^(e*d) which is a multiple of p, and
+so is congruent to 0 mod p. The statement f^(ed)*m = f*m (mod p) becomes
+0 = 0 (mod p) and is thus proven to be satisfied.
+
+Now, as gcd(f, N) = p, then gcd(f, q) = 1 (as N=p*q and p,q primes).
+Reconsider the statement,
+
+= f^(e*d) * m (mod p)
+
+This implies that,
+
+= f^(e*d - 1) * f * m (mod p)
+= f^(t * (p-1) * (q-1)) * f * m (mod p)
+= f * (f^(p-1)^(t*(q-1))) * m (mod p)
+
+By Fermatt's Little Theorem, f^(q-1) = 1 (mod q). So,
+
+= f * (1)^(t*(q-1)) * m (mod p)
+= f * m (mod p)
+
+and we are done. We have now covered all cases. (By switching letters, we also have
+the same result if we chose gcd(f, N) = q).
+
+
+
+Q.8 Imagine you are a security consultant, employed by the device vendor.
+    The vendor has heard that exponent and message blinding can be used to
+    prevent some side-channel attacks on RSA. Explain whether these
+    techniques would prevent this attack, and why.
+
+A.8
+
+Exponent and message blinding, such as that discussed in detail in
+'../time/21452.exam' Q.1,
+can be used to 'randomise' the decryption process, and thus help to render
+timing attacks useless.
+
+The Manger attack does not rely on a timing side channel. It relies on the
+adversary being able to distinguish in a failure in the integer-to-octets
+conversion and a subsequent failure, e.g. integrity check failure.
+
+Message blinding is implemented by multiplying by
+some v_i before modular exponentiation and then some v_f afterward.
+
+We can summarise the RSAES-OAEP-Decode algorithm as follows,
+
+1. Decrypt ciphertext using RSADP with c and private key. This is a
+   modular exponentiation.
+3. Integer to octet string conversion to get encoded message.
+2. OAEP decode using obtained encoded message and given label
+
+If the vendor adds exponent blinding, we (roughly) have the following,
+
+1. Multiply c by v_i
+2. Modular exponentiation (RSADP decryption)
+3. Multiply by v_f to recover c^d.
+4. Integer to octet string conversion to get encoded message.
+5. OAEP decode to recover decoded message.
+
+As you can see, the I2OSP and OAEP decoding steps (steps 4 and 5) are not affected
+by message blinding. Therefore, blinding would not *directly* prevent
+this attack: The adversary can still differentiate between an error in
+integer-to-octets conversion and a subsequent failure.
+
+However, above in Q.2., I discussed that even if the vendor implements the
+countermeasure of using the same error codes, an adversary could differentiate
+between the two error conditions. One such method is by the time until the
+error occurs. I also concluded that this is a probably quite successful
+method of differentiating between the errors, especially if the adversary
+can use the label hashing to manipulate execution time in between the errors.
+We also concluded that is hard for the vendor to give an implementation
+that makes it impossible to differentiate between the error conditions in
+this way.
+
+So, using blinding would randomise the time that RSAES-OAEP-Decode
+takes to execute. This would render it impossible to differentiate between
+the error conditions and so the attack cannot take place. So, I would
+actually conclude that blinding *is* a useful countermeasure
+against the Manger attack.
+
+But, there is an important caveat. Computing a random pair (v_i, v_f)
+where v_f^-1 = v_i^x (mod n) requires computing a modular inverse and
+so requires a computational overhead. According to [Kocher], it
+is often not practical to generate a random pair upon every decryption.
+The vendor must compute a random pair every time. Otherwise, if the
+random pair doesn't change during an entire attack, then the above timing
+exploit will still be possible. Also, [Kocher] states this is bad practice
+anyway, since the (v_i,v_f) pairs themselves may then become vulnerable
+to timing attacks too.
+
+Another caveat is that blinding is effective against differential time attacks,
+but it is not effective against simple time attacks.
+
+
+
+[Kocher] http://web.cse.msstate.edu/~ramkumar/TimingAttacks.pdf

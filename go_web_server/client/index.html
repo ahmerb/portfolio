@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Bootstrap 101 Template</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <!-- Latest compiled and minified CSS -->
+      <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+
+      <!-- Optional theme -->
+      <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap-theme.min.css">
+
+      <style type="text/css">
+body {
+  padding-top: 40px;
+  padding-bottom: 40px;
+  background-color: #eee;
+}
+
+.form-details {
+  max-width: 330px;
+  padding: 15px;
+  margin: 0 auto;
+}
+.form-details .form-details-heading,
+.form-details .checkbox {
+  margin-bottom: 10px;
+}
+.form-details .checkbox {
+  font-weight: normal;
+}
+.form-details .form-control {
+  position: relative;
+  height: auto;
+  padding: 10px;
+  font-size: 16px;
+}
+.form-details .form-control:focus {
+  z-index: 2;
+}
+      </style>
+
+      <script src="/assets/app.js"></script>
+  </head>
+  <body>
+
+
+
+    <div class="container">
+
+      <form action="/" method="get" class="form-details" onsubmit="form_submit()">
+
+        <h2 class="form-details-heading">Details</h2>
+
+        <label for="inputEmail" class="sr-only">Email address</label>
+        <input type="email" id="inputEmail" class="form-control"
+        oncopy="form_elem('copy', 'inputEmail')"
+        onpaste="form_elem('paste', 'inputEmail')"
+        onkeydown="key_down()"
+        placeholder="Email address" required autofocus>
+
+        <label for="inputCardNumber" class="sr-only">Card Number</label>
+        <input type="text" id="inputCardNumber" class="form-control"
+        oncopy="form_elem('copy', 'inputCardNumber')"
+        onpaste="form_elem('paste', 'inputCardNumber')"
+        onkeydown="key_down()"
+        placeholder="Card Number" required>
+
+        <label for="inputCVV" class="sr-only">CVV</label>
+        <input type="text" id="inputCVV" class="form-control"
+        oncopy="form_elem('copy', 'inputCVV')"
+        onpaste="form_elem('paste', 'inputCVV')"
+        onkeydown="key_down()"
+        placeholder="Security Code" required>
+
+        <div class="checkbox">
+          <label>
+            <input type="checkbox" value="agree"> Agree to Terms
+          </label>
+        </div>
+
+        <input type="hidden" name="sessionId" id="sessionId">
+
+        <button class="btn btn-lg btn-primary btn-block" type="submit">Submit</button>
+      </form>
+
+    </div> <!-- /container -->
+
+  </body>
+</html>

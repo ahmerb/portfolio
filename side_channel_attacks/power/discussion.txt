@@ -1,0 +1,170 @@
+
+Q.1 As a security consultant, you have been working on a prototype of the
+    attack target; before the product is deployed, the vendor is willing to
+    make any alteration necessary (in software or hardware) to prevent the
+    attack.  Explain the options available, and which one you would
+    recommend.
+
+A.1
+
+The goal of a countermeasure against such a DPA attack would be to make the power
+consumption of the cryptographic device independent of the intermediate values of
+the intermediate values of the executed cryptographic algorithm (the ones which the
+adversary attacks in a DPA).
+
+We can implement countermeasures at the protocol, software and hardware level.
+
+Protocol level countermeasure would be to do fresh rekeying.
+For each message a random ID is created which determines
+how to derive session keys based on a secret
+key. The session key is produced by always updating the same secret
+key.
+
+One such software approach that does is hiding. There are two approaches: making the
+power consumption appear random, or, making the power consumption appear constant.
+
+To achieve the former (random power consumption), we can apply hiding in the time
+dimension. In a DPA attack, the alignment of trace points across the different
+recorded traces is crucial. For example, in our attack, we require that the clock cycle
+/ time t when the intermediate value is computed is the same across each recorded trace.
+If the vendor can randomise the time t when an intermediate value is computed upon
+every encryption/decryption, then they can weaken the DPA attack.
+
+There are common techniques to do this, which are often combined. First, is the random insertion of
+no-ops before, during and after execution of the encryption/decryptions. Note, where
+the no-ops are inserted should be random on each execution, but the number of insertions
+may be constant. We also have to ensure that the no-ops do not have a distinctive
+power trace, else the attacker can easily identify them in the power traces and
+remove them. This method works against the attack because the peak for maximum correlation
+at some time t will become smaller. This happens as the instruction where the attacked
+data is processed is now processed in multiple consecutive clock cycles. A benefit of this
+approach is the vendor can tune desired security by inserting more no-ops to reduce
+the maximum correlation peak an attacker can obtain.
+
+Another technique is to execute independent operations in an arbitrary order. In
+terms of throughput, this is more effective than inserting no-ops.
+However, with no-ops, we can choose to insert more no-ops to achieve a higher
+security level. The attack I implemented attacks the SBox. SBox lookups are independent
+operations. The vendor could implement this sequence of lookups to occur in random
+order each round. This will cause the trace points corresponding to the SBox on the
+intermediate value the attacker is searching for to appear at different time points
+across each recorded trace. This misalignment leads to the correlation peak becoming
+'distributed' across the range of time points that the SBox lookup in question now occurs.
+Note that an attacker can somewhat counteract this countermeasure by aligning the traces
+to minimise misalignment. If the maximum misalignment is x, then they sum up over x clock
+cycles and find the correlation with that instead. Even with this though, the size of the
+maximum correlation peak will be smaller.
+
+I have now discussed hiding. Another countermeasure approach is masking. With masking, we
+aim to remove the dependency between the processed intermediate value (that are useful to
+the attacker) and the power consumptions for them.
+To achieve this, each intermediate value v (input to SBox) is concealed by a random value m, the mask. The
+mask would not be known by the attacker. We do this as follows.
+We precompute another SBox lookup table S_m s.t. S_m( v XOR m ) = S( v ) XOR m = v_m.
+Now, we replace the SBox operation S( v ) with S_m( v XOR m ). Then, afterwards, we XOR the result
+with m to get S( V ). As a result, there will not be a power trace output for S( v ), which
+is what the attacker requires. And, we can still recover S( V ) after the operation.
+
+We must perform this masking every round, else the attacker can just attack the SBox in another
+round. The masks also need to be chosen uniformly at random every new encryption run. If not, v_m
+would not be independent of V and m, and so the attacker could infer m and v.
+
+Unlike hiding, which only weakens the DPA attack (attacker just needs more traces), masking
+ensures a first order DPA attack cannot succeed. However, higher order DPA attacks can still succeed.
+These work by using a different statistical distinguisher that takes 2 or more points
+of power trace as input.
+
+An important precondition for both hiding and masking is that the random number generator is cryptographically
+secure and is seeded from a sufficient entropy source. If the attacker can influence the RNG then
+they can introduce bias into either the masks, the location of inserted no-ops or order of shuffled
+instructions.
+
+For masking, note we did not use an operation that is multiplicative. If we replaced the XOR
+with a multiplication, then the attacker could use an all zero plaintext and then the mask
+would become ineffective (forall x . 0*x=0).
+
+Another countermeasure is to compute the SBox lookups in parallel. This will mean that
+for a particular key hypothesis, the power trace corresponding to the targeted lookup now
+includes the power for multiple other lookups. They are effectively noise. This weakens
+the DPA attack too. This countermeasure could be implemented in hardware, if we used a processing
+unit that could do multiple lookups in parallel.
+
+In conclusion, none of the countermeasures provide absolute security against differential power
+analysis attacks. At best, masking protects against first order DPA. As a result, I would
+recommend a combination of all the above techniques. I would also strongly recommend implementing
+protocol level countermeasures, if possible.
+If the vendor is willing to change hardware, I'd also recommend using a device that can do the
+lookups in parallel. This would also improve latency.
+
+
+
+
+Q.2 The vendor of the attack target opts to replace the 8-bit Intel 8051
+    micro-processor with a modern, 32-bit ARM Cortex-M0; they supplement it
+    with hardware support for that allows single-cycle operations on 32
+    bits of the AES state.  Doing so will naturally reduce the latency of
+    encryption or decryption, but they *also* want to know if it might make
+    the device more secure wrt.  DPA attacks: what is your assessment, and
+    why ?
+
+A.2
+
+Depending on the AES implementation, an entire row or column (32 bits, 4 bytes) is
+now processed in a single cycle. So, in each round, 4 SBox lookups are now
+computed in a single cycle.
+
+The current attack attacks a single key byte, corresponding to a single SBox lookup,
+at a time. So, if the new processor is used, the power trace at the time point
+corresponding to this lookup is now combined with power traces for non-related lookups.
+So, when trying to recover one key byte, the value of the power trace also now contains
+information for three other key bytes. This is effectively just noise. Therefore,
+the correlations will be much lower and many more power traces will be needed for the
+DPA attack to succeed.
+
+
+Alternatively, we could attack an entire row/column (32 bits) at a time. This means that
+the power measurement we are looking for does not include other lookups as noise.
+However, this means that instead
+of recovering the key byte-by-byte, the attacker now has to recover an entire 32 bits
+at a time. This means that the number of key hypothesis to test the correlations of power
+traces at time t increases (assuming AES-128) from 16 * 2^8 to 4 * 2^32. This is significantly
+larger, and we can say an increased security level has been achieved: The DPA attack will
+take significantly longer.
+
+
+
+
+Q.8 The vendor of the attack target decides to use AES-192 rather than
+    AES-128; their argument is that longer keys will naturally improve
+    security in general *and* vs.  DPA attacks.  Explain if and why you
+    agree or disagree with this argument.
+
+Against a scheme where the strongest known attack is a brute force scheme,
+then increasing the key length from k bits to k+x bits will provide an
+extra x bits of security. I.e., the brute force search space increases
+from size 2^k to 2^(k+x).
+
+However, we have just implemented a DPA attack against AES. The attack we
+implemented is against AES-128. In this attack, we attack only a byte of
+the AES key at a time. An attack on each byte involves looping
+through all key hypotheses and trace times and finding the correlation between
+each, across all the AES encryptions/decryptions we performed.
+Let T be the time required to recover one byte of the key. T will be proportional
+to the number of encryptions we perform (in my case 20), times the number of trace points
+we observe (in my case 3000), times the number of key byte hypotheses, which is 2^8.
+
+So, for AES-128, the time taken will be 16 * T, as there are 16 bytes in the AES-128
+key.
+
+For AES-192, the key increases in size to 24 bytes. However, the attack is still on each
+byte, so the time only increases to 24 * T. You probably don't need to increase the
+number of trace points you observe, as long as you are observing the first round SubBytes.
+(Or last round, for decryption).
+
+So, as evidenced by this attack, increasing key sizes will not necessarily sufficiently
+increase security against DPA attacks.
+
+However, one caveat is that, in AES-192, the key size is 192 bits, but the state matrix
+is still 128 bits. So, we can use the attack to recover the first 128 bits, but then we
+need to extend our technique for the remaining bits.
+But, to do this, we can simply attack the remaining rounds.

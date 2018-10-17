@@ -1,0 +1,3 @@
+### Dartboard Object Detector using Hough Circle and Line Transforms and Viola-Jones
+
+A third-year pair project for the unit Image Processing and Computer Vision. We (me and @callumPearce) used OpenCV in C++ to build a dartboard detector. First, we used OpenCV's 'cascade classifier' function to train a Viola-Jones classifier to detect dartboards. This would give us regions in an image where dartboards may be. We then implemented Hough Circle and Line transforms to look for concentric circles and lines going through their centre points. I've included our report discussing our results and the methods we've used. We achieved First Class marks. At the moment, only the [report.pdf](report.pdf) is included.
